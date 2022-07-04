@@ -157,6 +157,4 @@ AUTHENTICATION_BACKENDS = [
 
 AXES_FAILURE_LIMIT = 5
 
-AXES_COOLOFF_TIME =  3.0
-
 django_heroku.settings(locals())
