@@ -1,7 +1,9 @@
 from django import forms
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views import View
 from django.views.generic.list import ListView
 from django.views.generic.edit import UpdateView
+from setuptools import setup
 from .models import Post
 from django.db.models import Q, Count, Case, When
 from comentarios.forms import FormComentario
@@ -14,19 +16,19 @@ class PostIndex(ListView):
     template_name = 'posts/index.html'
     paginate_by = 6
     context_object_name = 'posts'
-    
+
     def get_queryset(self):
-            qs = super().get_queryset()
-            qs = qs.select_related('categoria_post')
-            qs = qs.order_by('-id')
-            qs = qs.annotate(
-                numero_comentarios=Count(
-                    Case(
-                        When(comentario__publicado_comentario=True, then=1)
-                    )
+        qs = super().get_queryset()
+        qs = qs.select_related('categoria_post')
+        qs = qs.order_by('-id')
+        qs = qs.annotate(
+            numero_comentarios=Count(
+                Case(
+                    When(comentario__publicado_comentario=True, then=1)
                 )
             )
-            return qs
+        )
+        return qs
 
 
 class PostBusca(PostIndex):
@@ -54,18 +56,53 @@ class PostCategoria(PostIndex):
     template_name = 'posts/post_categoria.html'
 
     def get_queryset(self):
-            qs = super().get_queryset()
+        qs = super().get_queryset()
 
-            categoria = self.kwargs.get('categoria', None)
+        categoria = self.kwargs.get('categoria', None)
 
-            if not categoria:
-                return qs
-
-            qs = qs.filter(categoria_post__nome_cat__iexact=categoria)
-            
+        if not categoria:
             return qs
 
+        qs = qs.filter(categoria_post__nome_cat__iexact=categoria)
 
+        return qs
+
+
+class PostDetalhes(View):
+    template_name = 'posts/post_detalhes.html'
+
+    def setup(self, request, *args, **kwargs):
+        super().setup(request, *args, **kwargs)
+
+        pk = self.kwargs.get('pk')
+        post = get_object_or_404(Post, pk=pk, publicado_post=True)
+        self.contexto = {
+            'post': post,
+            'comentarios': Comentario.objects.filter(post_comentario=post, publicado_comentario=True),
+            'form': FormComentario(request.POST or None)
+        }
+
+    def get(self, request, *args, **kwargs):
+        return render(request, self.template_name, self.contexto)
+
+    def post(self, request, *args, **kwargs):
+        form = self.contexto['form']
+
+        if not form.is_valid():
+            return render(request, self.template_name, self.contexto)
+
+        comentario = form.save(commit=False)
+
+        if request.user.is_authenticated:
+            comentario.usuario_comentario = request.user
+
+            comentario.post_comentario = self.contexto['post']
+            comentario.save()
+            messages.success(self.request, 'Comentário enviado com sucesso.')
+            return redirect('post_detalhes', pk=self.kwargs.get('pk'))
+
+
+"""
 class PostDetalhes(UpdateView):
     template_name = 'posts/post_detalhes.html'
     model = Post
@@ -93,4 +130,4 @@ class PostDetalhes(UpdateView):
         comentario.save()
         messages.success(self.request, 'Comentário enviado com sucesso.')
         return redirect('post_detalhes', pk=post.id)
-        
+"""
